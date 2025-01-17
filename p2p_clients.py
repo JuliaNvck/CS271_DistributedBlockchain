@@ -1,6 +1,8 @@
 import socket
 import threading
 import sys
+from queue import Queue
+import json
 
 # Predefined ports and IP addresses for the 3 peers
 DEFAULT_PEERS = [
@@ -19,6 +21,7 @@ class Peer:
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.bind(self.my_address) # bind to UDP socket
         self.running = True  # flag to control running state of listener thread
+        self.queue = Queue()  # Initialize an empty queue for the Blockchain
 
     def listen(self):
         # Listen for incoming UDP messages
@@ -27,10 +30,13 @@ class Peer:
             try:
                 self.socket.settimeout(1)  # Set timeout to periodically check running flag
                 data, addr = self.socket.recvfrom(1024) # Receive message
+                received_transaction = json.loads(data.decode('utf-8'))
+                self.queue.put(received_transaction)
+                message = received_transaction[2]
                 if addr in PEER_NAMES:
-                    print(f"Received from {PEER_NAMES[addr]}: {data.decode()}")
+                    print(f"Received from {PEER_NAMES[addr]}: {message}")
                 else:
-                    print(f"Received from unknown peer {addr}: {data.decode()}")
+                    print(f"Received from unknown peer {addr}: {message}")
             except socket.timeout:
                 continue  # Ignore timeouts and keep checking for messages
             except Exception as e:
@@ -38,18 +44,14 @@ class Peer:
                 break
 
     def send_message(self, message, receiver):
-        # Send message to receiver or broadcast message to all other peers
-        if receiver == 4:
-            for peer in self.peer_addresses:
-                try:
-                    self.socket.sendto(message.encode(), peer)
-                    print(f"Sent to {PEER_NAMES[peer]}: {message}")
-                except Exception as e:
-                    print(f"Error sending to {PEER_NAMES[peer]}: {e}")
-        else:
-            peer = self.peer_addresses[receiver - 1]
+        # Broadcast message to all other peers
+        transaction = [self.my_address, self.peer_addresses[receiver - 1], int(message)]
+        self.queue.put(transaction)
+        transaction_data = json.dumps(transaction).encode('utf-8')
+
+        for peer in self.peer_addresses:
             try:
-                self.socket.sendto(message.encode(), peer)
+                self.socket.sendto(transaction_data, peer)
                 print(f"Sent to {PEER_NAMES[peer]}: {message}")
             except Exception as e:
                 print(f"Error sending to {PEER_NAMES[peer]}: {e}")
@@ -66,7 +68,7 @@ class Peer:
                 self.running = False  # Stop listener thread
                 break
             else:
-                receiver = int(input("Enter receiver (1, 2, 3, or 4 (choose 4 for broadcast)): "))
+                receiver = int(input("Enter receiver (1, 2, or 3): "))
             self.send_message(message, receiver)
 
         self.socket.close()
