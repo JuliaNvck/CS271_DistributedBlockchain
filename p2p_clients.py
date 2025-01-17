@@ -37,9 +37,17 @@ class Peer:
                 print(f"Error receiving data: {e}")
                 break
 
-    def send_message(self, message):
-        # Broadcast message to all other peers
-        for peer in self.peer_addresses:
+    def send_message(self, message, receiver):
+        # Send message to receiver or broadcast message to all other peers
+        if receiver == 4:
+            for peer in self.peer_addresses:
+                try:
+                    self.socket.sendto(message.encode(), peer)
+                    print(f"Sent to {PEER_NAMES[peer]}: {message}")
+                except Exception as e:
+                    print(f"Error sending to {PEER_NAMES[peer]}: {e}")
+        else:
+            peer = self.peer_addresses[receiver - 1]
             try:
                 self.socket.sendto(message.encode(), peer)
                 print(f"Sent to {PEER_NAMES[peer]}: {message}")
@@ -57,7 +65,9 @@ class Peer:
                 print("Exiting...")
                 self.running = False  # Stop listener thread
                 break
-            self.send_message(message)
+            else:
+                receiver = int(input("Enter receiver (1, 2, 3, or 4 (choose 4 for broadcast)): "))
+            self.send_message(message, receiver)
 
         self.socket.close()
         print("Socket closed.")
