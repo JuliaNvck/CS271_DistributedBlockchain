@@ -2,7 +2,7 @@ import socket
 import threading
 import sys
 
-# Predefined ports and IP addresses for the peers
+# Predefined ports and IP addresses for the 3 peers
 DEFAULT_PEERS = [
     ("127.0.0.1", 5000),  # Peer 1
     ("127.0.0.1", 5001),  # Peer 2
@@ -14,19 +14,19 @@ PEER_NAMES = {peer: f"Peer {i+1}" for i, peer in enumerate(DEFAULT_PEERS)}
 
 class Peer:
     def __init__(self, my_ip, my_port, peer_addresses):
-        self.my_address = (my_ip, my_port)
-        self.peer_addresses = peer_addresses
+        self.my_address = (my_ip, my_port) # initialize peer with address
+        self.peer_addresses = peer_addresses # list of other peer's addresses
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.socket.bind(self.my_address)
-        self.running = True  # Flag to control the listener thread
+        self.socket.bind(self.my_address) # bind to UDP socket
+        self.running = True  # flag to control running state of listener thread
 
     def listen(self):
-        """Listen for incoming messages."""
+        # Listen for incoming UDP messages
         print(f"Listening on {self.my_address[0]}:{self.my_address[1]}")
         while self.running:
             try:
-                self.socket.settimeout(1)  # Set a timeout to periodically check the running flag
-                data, addr = self.socket.recvfrom(1024)
+                self.socket.settimeout(1)  # Set timeout to periodically check running flag
+                data, addr = self.socket.recvfrom(1024) # Receive message
                 if addr in PEER_NAMES:
                     print(f"Received from {PEER_NAMES[addr]}: {data.decode()}")
                 else:
@@ -38,7 +38,7 @@ class Peer:
                 break
 
     def send_message(self, message):
-        """Send a message to all other peers."""
+        # Broadcast message to all other peers
         for peer in self.peer_addresses:
             try:
                 self.socket.sendto(message.encode(), peer)
@@ -47,34 +47,35 @@ class Peer:
                 print(f"Error sending to {PEER_NAMES[peer]}: {e}")
 
     def run(self):
-        # Start the listening thread
+        # Start listening thread
         threading.Thread(target=self.listen, daemon=True).start()
 
         # Allow the user to send messages
         while self.running:
             message = input("Enter message to send (type 'exit' to quit): ")
-            if message.lower() == "exit":
+            if message.lower() == "exit": # user inputs 'exit'
                 print("Exiting...")
-                self.running = False  # Stop the listener thread
+                self.running = False  # Stop listener thread
                 break
             self.send_message(message)
 
         self.socket.close()
-        print("Socket closed. Goodbye!")
+        print("Socket closed.")
 
 def main():
-    if len(sys.argv) < 3:
+    # read client’s port as arg (run on local host IP) from CLI
+    if len(sys.argv) < 2:
         print("Usage: python3 udp_p2p.py <my_ip> <my_port>")
         print("Example: python3 udp_p2p.py 127.0.0.1 5000")
         sys.exit(1)
 
-    my_ip = sys.argv[1]
-    my_port = int(sys.argv[2])
+    my_ip = "127.0.0.1"
+    my_port = int(sys.argv[1])
 
     # Exclude this peer's address from the list of peers
     peer_addresses = [addr for addr in DEFAULT_PEERS if addr != (my_ip, my_port)]
 
-    # Create and run the peer
+    # Create and run the peer instance
     peer = Peer(my_ip, my_port, peer_addresses)
     peer.run()
 
