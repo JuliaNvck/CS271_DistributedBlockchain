@@ -3,6 +3,8 @@ import threading
 import sys
 from queue import Queue
 import json
+import hashlib
+
 
 # Predefined ports and IP addresses for the 3 peers
 DEFAULT_PEERS = [
@@ -10,6 +12,32 @@ DEFAULT_PEERS = [
     ("127.0.0.1", 5001),  # Peer 2
     ("127.0.0.1", 5002)   # Peer 3
 ]
+
+class Block:
+    def __init__(self, sender, receiver, amount):
+        self.sender = sender
+        self.receiver = receiver
+        self.amount = amount
+        # self.previous_hash = previous_hash
+        # self.hash = calculate_hash(sender, receiver, amount, previous_hash)
+
+    def to_dict(self):
+            """Convert the Block object to a dictionary for serialization."""
+            return {
+                'sender': self.sender,
+                'receiver': self.receiver,
+                'amount': self.amount
+            }
+
+    @classmethod
+    def from_dict(cls, obj_dict):
+        """Reconstruct the Block object from a dictionary."""
+        return cls(
+            sender=obj_dict['sender'],
+            receiver=obj_dict['receiver'],
+            amount=obj_dict['amount']
+        )
+
 
 # Create a mapping of addresses to peer identifiers
 PEER_NAMES = {peer: f"Peer {i+1}" for i, peer in enumerate(DEFAULT_PEERS)}
@@ -30,9 +58,10 @@ class Peer:
             try:
                 self.socket.settimeout(1)  # Set timeout to periodically check running flag
                 data, addr = self.socket.recvfrom(1024) # Receive message
-                received_transaction = json.loads(data.decode('utf-8'))
-                self.queue.put(received_transaction)
-                message = received_transaction[2]
+                block_dict = json.loads(data.decode('utf-8'))
+                received_block = Block.from_dict(block_dict)
+                self.queue.put(received_block)
+                message = received_block.amount
                 if addr in PEER_NAMES:
                     print(f"Received from {PEER_NAMES[addr]}: {message}")
                 else:
@@ -45,13 +74,15 @@ class Peer:
 
     def send_message(self, message, receiver):
         # Broadcast message to all other peers
-        transaction = [self.my_address, self.peer_addresses[receiver - 1], int(message)]
-        self.queue.put(transaction)
-        transaction_data = json.dumps(transaction).encode('utf-8')
+        # transaction = [self.my_address, self.peer_addresses[receiver - 1], int(message)]
+        block = Block(self.my_address, DEFAULT_PEERS[receiver - 1], int(message))
+        self.queue.put(block)
+        block_dict = block.to_dict()
+        serialized_block = json.dumps(block_dict).encode('utf-8')
 
         for peer in self.peer_addresses:
             try:
-                self.socket.sendto(transaction_data, peer)
+                self.socket.sendto(serialized_block, peer)
                 print(f"Sent to {PEER_NAMES[peer]}: {message}")
             except Exception as e:
                 print(f"Error sending to {PEER_NAMES[peer]}: {e}")
