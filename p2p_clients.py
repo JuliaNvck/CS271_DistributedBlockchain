@@ -1,7 +1,7 @@
 import socket
 import threading
 import sys
-from queue import Queue
+from collections import deque
 import json
 import hashlib
 
@@ -13,30 +13,61 @@ DEFAULT_PEERS = [
     ("127.0.0.1", 5002)   # Peer 3
 ]
 
+class HashPointer:
+    def __init__(self, previous_block, previous_hash):
+        self.previous_block = previous_block  # Pointer to the previous block
+        self.previous_hash = previous_hash    # Hash of the previous block
+    
+    def to_dict(self):
+        """Convert the HashPointer to a dictionary for serialization."""
+        return {
+            'previous_hash': self.previous_hash,
+            # Optional: include the sender and receiver of the previous block
+            'previous_block': self.previous_block.to_dict() if self.previous_block else None
+        }
+
+    @classmethod
+    def from_dict(cls, obj_dict, blockchain_lookup):
+        """Reconstruct the HashPointer from a dictionary."""
+        previous_block = blockchain_lookup.get(obj_dict['previous_hash'])
+        return cls(
+            previous_block=previous_block,
+            previous_hash=obj_dict['previous_hash']
+        )
+
 class Block:
-    def __init__(self, sender, receiver, amount):
+    def __init__(self, sender, receiver, amount, hash_pointer=None):
         self.sender = sender
         self.receiver = receiver
         self.amount = amount
-        # self.previous_hash = previous_hash
-        # self.hash = calculate_hash(sender, receiver, amount, previous_hash)
+        self.hash_pointer = hash_pointer  # Hash pointer to the previous block
+        self.hash = self.calculate_hash()  # Hash of the current block
 
     def to_dict(self):
-            """Convert the Block object to a dictionary for serialization."""
-            return {
-                'sender': self.sender,
-                'receiver': self.receiver,
-                'amount': self.amount
-            }
+        """Convert the Block object to a dictionary for serialization."""
+        return {
+            'sender': self.sender,
+            'receiver': self.receiver,
+            'amount': self.amount,
+            'hash_pointer': self.hash_pointer.to_dict() if self.hash_pointer else None,
+            'hash': self.hash
+        }
 
     @classmethod
-    def from_dict(cls, obj_dict):
+    def from_dict(cls, obj_dict, blockchain_lookup):
         """Reconstruct the Block object from a dictionary."""
+        hash_pointer = HashPointer.from_dict(obj_dict['hash_pointer'], blockchain_lookup) if obj_dict['hash_pointer'] else None
         return cls(
             sender=obj_dict['sender'],
             receiver=obj_dict['receiver'],
-            amount=obj_dict['amount']
+            amount=obj_dict['amount'],
+            hash_pointer=hash_pointer
         )
+    
+    def calculate_hash(self):
+        block_data = f"{self.sender},{self.receiver},{self.amount},{self.hash_pointer.previous_hash if self.hash_pointer else 'Genesis'}"
+        return hashlib.sha256(block_data.encode()).hexdigest()
+
 
 
 # Create a mapping of addresses to peer identifiers
@@ -49,7 +80,28 @@ class Peer:
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.bind(self.my_address) # bind to UDP socket
         self.running = True  # flag to control running state of listener thread
-        self.queue = Queue()  # Initialize an empty queue for the Blockchain
+        self.blockchain = deque()  # Initialize an empty queue for the Blockchain
+        self.block_lookup = {} # To look up blocks by hash
+        self.initialize_blockchain()
+
+    def initialize_blockchain(self):
+        # Create the genesis block
+        genesis_block = Block("Genesis", "Genesis", 0)
+        self.blockchain.appendleft(genesis_block)  # Add the genesis block to the queue
+        self.block_lookup[genesis_block.hash] = genesis_block
+        print("Blockchain initialized with Genesis block.")
+
+    def add_block(self, sender, receiver, amount):
+        # get block currently at head of blockchain
+        prev_block = self.blockchain[0]
+        # create hash pointer for prev block
+        hash_pointer = HashPointer(prev_block, prev_block.hash)
+        # create new block
+        block = Block(sender, receiver, amount, hash_pointer)
+        # add new block to head of blockchain
+        self.blockchain.appendleft(block)
+        self.block_lookup[block.hash] = block
+        print(f"New block added to the head: {block.hash}")
 
     def listen(self):
         # Listen for incoming UDP messages
@@ -59,8 +111,9 @@ class Peer:
                 self.socket.settimeout(1)  # Set timeout to periodically check running flag
                 data, addr = self.socket.recvfrom(1024) # Receive message
                 block_dict = json.loads(data.decode('utf-8'))
-                received_block = Block.from_dict(block_dict)
-                self.queue.put(received_block)
+                received_block = Block.from_dict(block_dict, self.block_lookup)
+                self.blockchain.appendleft(received_block)
+                self.block_lookup[received_block.hash] = received_block
                 message = received_block.amount
                 if addr in PEER_NAMES:
                     print(f"Received from {PEER_NAMES[addr]}: {message}")
@@ -75,8 +128,10 @@ class Peer:
     def send_message(self, message, receiver):
         # Broadcast message to all other peers
         # transaction = [self.my_address, self.peer_addresses[receiver - 1], int(message)]
-        block = Block(self.my_address, DEFAULT_PEERS[receiver - 1], int(message))
-        self.queue.put(block)
+        # block = Block(self.my_address, DEFAULT_PEERS[receiver - 1], int(message))
+        # self.blockchain.appendleft(block)
+        self.add_block(self.my_address, DEFAULT_PEERS[receiver - 1], int(message))
+        block = self.blockchain[0]
         block_dict = block.to_dict()
         serialized_block = json.dumps(block_dict).encode('utf-8')
 
