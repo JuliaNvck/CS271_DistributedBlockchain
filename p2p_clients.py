@@ -173,14 +173,15 @@ class Peer:
     def handle_release(self, message):
         released_lamport_pair = tuple(message["lamport_pair"])
         self.clock = max(self.clock, released_lamport_pair[0]) + 1  # Update clock
-        self.queue = [req for req in self.queue if req != released_lamport_pair]  # Remove the released request
+        # self.queue = [req for req in self.queue if req != released_lamport_pair]  # Remove the released request
+        self.queue = [req for req in self.queue if req[1] != released_lamport_pair[1]]  # Remove the released request
         heapq.heapify(self.queue)  # Rebuild the heap
         print(f"Processed RELEASE for Lamport pair: {released_lamport_pair}. Updated queue: {self.queue}")
 
     def handle_block(self, block_dict, addr, lamport_pair):
         # Update the local clock based on the received Lamport pair
-        received_clock = lamport_pair["clock"]
-        sender_port = lamport_pair["port"]
+        received_clock = lamport_pair[0]
+        sender_port = lamport_pair[1]
         self.clock = max(self.clock, received_clock) + 1
         print(f"\nUpdated clock: {self.clock} after receiving Lamport pair: ({received_clock}, {sender_port}) from {PEER_NAMES[addr]}")
         # Deserialize block and add it to blockchain
