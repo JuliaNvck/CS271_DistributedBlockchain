@@ -83,6 +83,7 @@ class Peer:
         self.blockchain = deque()  # Initialize an empty queue for the Blockchain
         self.block_lookup = {} # To look up blocks by hash
         self.initialize_blockchain()
+        self.clock = 0
 
     def initialize_blockchain(self):
         # Create the genesis block
@@ -110,10 +111,24 @@ class Peer:
             try:
                 self.socket.settimeout(1)  # Set timeout to periodically check running flag
                 data, addr = self.socket.recvfrom(1024) # Receive message
-                block_dict = json.loads(data.decode('utf-8'))
+                message_data = json.loads(data.decode('utf-8'))
+
+                 # extract lamport pair and block
+                lamport_pair = message_data["lamport_pair"]
+                received_clock = lamport_pair["clock"]
+                sender_port = lamport_pair["port"]
+                block_dict = message_data["block"]
+
+                # Update the local clock based on the received Lamport pair
+                self.clock = max(self.clock, received_clock) + 1
+                print(f"Updated clock: {self.clock} after receiving Lamport pair: ({received_clock}, {sender_port}) from {PEER_NAMES[addr]}")
+
+                # Deserialize block and add it to blockchain
                 received_block = Block.from_dict(block_dict, self.block_lookup)
-                self.blockchain.appendleft(received_block)
+                # self.blockchain.appendleft(received_block)
+                self.add_block(received_block.sender, received_block.receiver, received_block.amount)
                 self.block_lookup[received_block.hash] = received_block
+
                 message = received_block.amount
                 if addr in PEER_NAMES:
                     print(f"Received from {PEER_NAMES[addr]}: {message}")
@@ -127,18 +142,27 @@ class Peer:
 
     def send_message(self, message, receiver):
         # Broadcast message to all other peers
-        # transaction = [self.my_address, self.peer_addresses[receiver - 1], int(message)]
-        # block = Block(self.my_address, DEFAULT_PEERS[receiver - 1], int(message))
-        # self.blockchain.appendleft(block)
+        # make sure to only accept int messages!!
+        # send event: increment clock
+        self.clock += 1
+        # add block to head of blockchain
         self.add_block(self.my_address, DEFAULT_PEERS[receiver - 1], int(message))
+        # serialize block and attach lamport pair (clock, port)
         block = self.blockchain[0]
         block_dict = block.to_dict()
-        serialized_block = json.dumps(block_dict).encode('utf-8')
+        message_data = {
+        "block": block_dict,
+        "lamport_pair": {
+            "clock": self.clock,  # current logical clock
+            "port": self.my_address[1]  # process ID (port number)
+        }
+    }
+        serialized_block = json.dumps(message_data).encode('utf-8')
 
         for peer in self.peer_addresses:
             try:
                 self.socket.sendto(serialized_block, peer)
-                print(f"Sent to {PEER_NAMES[peer]}: {message}")
+                print(f"Sent to {PEER_NAMES[peer]}: {message} with Lamport pair: ({self.clock}, {self.my_address[1]})")
             except Exception as e:
                 print(f"Error sending to {PEER_NAMES[peer]}: {e}")
 
