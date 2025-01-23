@@ -110,6 +110,7 @@ class Peer:
 
     def request_mutex(self):
         # increment clock and set lamport pair ⟨clock, port⟩
+        # DON'T NEED TO INC CLOCK HERE
         self.clock += 1
         lamport_pair = (self.clock, self.my_address[1])
 
@@ -119,7 +120,7 @@ class Peer:
 
         # Clear the ack_set for the new request
         self.ack_set.clear()
-
+        
         # Broadcast the request to all clients
         request_message = {
             "type": "REQUEST",
@@ -136,7 +137,7 @@ class Peer:
         # Send an ACK to sender
         ack_message = {
             "type": "ACK",
-            "lamport_pair": received_lamport_pair
+            "lamport_pair": (self.clock, self.my_address[1])
         }
         self.send_message(ack_message, addr)
 
@@ -151,7 +152,7 @@ class Peer:
 
     def check_mutex(self):
         # Check if the head of the queue is this process's request and received all ACKs
-        if self.queue[0] == (self.clock, self.my_address[1]) and len(self.ack_set) == len(self.peer_addresses):
+        if self.queue[0][1] == self.my_address[1] and len(self.ack_set) == len(self.peer_addresses):
             print("Mutex granted.")
             self.mutex = True
 
@@ -169,7 +170,6 @@ class Peer:
             }
             self.broadcast_message(release_message)
     
-    # wouldn't i just remove from head??
     def handle_release(self, message):
         released_lamport_pair = tuple(message["lamport_pair"])
         self.clock = max(self.clock, released_lamport_pair[0]) + 1  # Update clock
@@ -246,10 +246,17 @@ class Peer:
     def broadcast_message(self, message):
         # Broadcast message to all other peers
         # serialize message
-        serialized_message = json.dumps(message).encode('utf-8') 
+        # serialized_message = json.dumps(message).encode('utf-8') 
         # Iterate over all peer addresses and send the message
         for peer in self.peer_addresses:
             try:
+                # Increment clock before each send event
+                self.clock += 1
+                # Update clock in message
+                message["lamport_pair"] = (self.clock, self.my_address[1])
+                
+                serialized_message = json.dumps(message).encode('utf-8') # serialize message
+
                 self.socket.sendto(serialized_message, peer)  # Send the message via UDP
                 print(f"Broadcasted message to {peer}: {message}")
             except Exception as e:
@@ -267,29 +274,45 @@ class Peer:
     def send_block(self, message, receiver):
         # Broadcast message to all other peers
         # make sure to only accept int messages!!
-        # send event: increment clock
+        
+        # Request the mutex
+        print("Requesting mutex before sending block...")
+        self.request_mutex()  # Broadcast REQUEST and wait for ACKs
+
+        # Wait for mutex to be granted
+        while not self.mutex:
+            continue
+
+        # Critical section: Add block to the blockchain
+        print("Mutex granted. Entering critical section to add block.")
+        # do you need???: send event: increment clock
         self.clock += 1
         # add block to head of blockchain
         self.add_block(self.my_address, DEFAULT_PEERS[receiver - 1], int(message))
+        # Broadcast message to all other peers
         # serialize block and attach lamport pair (clock, port)
         block = self.blockchain[0]
         block_dict = block.to_dict()
         message_data = {
             "type": "BLOCK",
             "block": block_dict,
-            "lamport_pair": {
-                "clock": self.clock,  # current logical clock
-                "port": self.my_address[1]  # process ID (port number)
-            }
+            "lamport_pair": (self.clock, self.my_address[1])
         }
-        serialized_block = json.dumps(message_data).encode('utf-8')
+        self.broadcast_message(message_data)
 
-        for peer in self.peer_addresses:
-            try:
-                self.socket.sendto(serialized_block, peer)
-                print(f"Sent to {PEER_NAMES[peer]}: {message} with Lamport pair: ({self.clock}, {self.my_address[1]})")
-            except Exception as e:
-                print(f"Error sending to {PEER_NAMES[peer]}: {e}")
+        # serialized_block = json.dumps(message_data).encode('utf-8')
+
+        # for peer in self.peer_addresses:
+        #     try:
+        #         self.socket.sendto(serialized_block, peer)
+        #         print(f"Sent to {PEER_NAMES[peer]}: {message} with Lamport pair: ({self.clock}, {self.my_address[1]})")
+        #     except Exception as e:
+        #         print(f"Error sending to {PEER_NAMES[peer]}: {e}")
+
+        # Release the mutex
+        self.release_mutex()
+        print("Exiting critical section and releasing mutex.")
+
 
     def run(self):
         # Start listening thread
