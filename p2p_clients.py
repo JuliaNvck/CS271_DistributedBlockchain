@@ -4,6 +4,7 @@ import sys
 from collections import deque
 import json
 import hashlib
+import heapq
 
 
 # Predefined ports and IP addresses for the 3 peers
@@ -84,6 +85,9 @@ class Peer:
         self.block_lookup = {} # To look up blocks by hash
         self.initialize_blockchain()
         self.clock = 0
+        self.queue = []  # Request priority queue
+        self.ack_set = set()  # Set to track ACKs
+        self.mutex = False  # Mutex flag
 
     def initialize_blockchain(self):
         # Create the genesis block
@@ -104,6 +108,92 @@ class Peer:
         self.block_lookup[block.hash] = block
         print(f"New block added to the head: {block.hash}")
 
+    def request_mutex(self):
+        # increment clock and set lamport pair ⟨clock, port⟩
+        self.clock += 1
+        lamport_pair = (self.clock, self.my_address[1])
+
+        # Add the request to the local priority queue (min heap)
+        heapq.heappush(self.queue, lamport_pair)
+        print(f"Requesting mutex with Lamport pair: {lamport_pair}")
+
+        # Clear the ack_set for the new request
+        self.ack_set.clear()
+
+        # Broadcast the request to all clients
+        request_message = {
+            "type": "REQUEST",
+            "lamport_pair": lamport_pair
+        }
+        self.broadcast_message(request_message)
+
+    def handle_request(self, message, addr):
+        received_lamport_pair = tuple(message["lamport_pair"])
+        self.clock = max(self.clock, received_lamport_pair[0]) + 1  # Update clock
+        heapq.heappush(self.queue, received_lamport_pair)  # Add the request to the priority queue
+        print(f"Received REQUEST from {addr} with Lamport pair: {received_lamport_pair}")
+
+        # Send an ACK to sender
+        ack_message = {
+            "type": "ACK",
+            "lamport_pair": received_lamport_pair
+        }
+        self.send_message(ack_message, addr)
+
+    def handle_ack(self, message, addr):
+        received_lamport_pair = tuple(message["lamport_pair"])
+        self.clock = max(self.clock, received_lamport_pair[0]) + 1  # Update clock
+        self.ack_set.add(addr)  # Add the sender to the ack_set
+        print(f"Received ACK from {addr} with Lamport pair: {received_lamport_pair}. Current ack_set: {self.ack_set}")
+
+        # Check if mutex can be granted
+        self.check_mutex()
+
+    def check_mutex(self):
+        # Check if the head of the queue is this process's request and received all ACKs
+        if self.queue[0] == (self.clock, self.my_address[1]) and len(self.ack_set) == len(self.peer_addresses):
+            print("Mutex granted.")
+            self.mutex = True
+
+    def release_mutex(self):
+        if self.mutex:
+            print("Releasing mutex.")
+            self.mutex = False
+            heapq.heappop(self.queue)  # Remove own request from the queue
+
+            # Broadcast a RELEASE message and increment clock
+            self.clock += 1
+            release_message = {
+                "type": "RELEASE",
+                "lamport_pair": (self.clock, self.my_address[1])
+            }
+            self.broadcast_message(release_message)
+    
+    # wouldn't i just remove from head??
+    def handle_release(self, message):
+        released_lamport_pair = tuple(message["lamport_pair"])
+        self.clock = max(self.clock, released_lamport_pair[0]) + 1  # Update clock
+        self.queue = [req for req in self.queue if req != released_lamport_pair]  # Remove the released request
+        heapq.heapify(self.queue)  # Rebuild the heap
+        print(f"Processed RELEASE for Lamport pair: {released_lamport_pair}. Updated queue: {self.queue}")
+
+    def handle_block(self, block_dict, addr, lamport_pair):
+        # Update the local clock based on the received Lamport pair
+        received_clock = lamport_pair["clock"]
+        sender_port = lamport_pair["port"]
+        self.clock = max(self.clock, received_clock) + 1
+        print(f"\nUpdated clock: {self.clock} after receiving Lamport pair: ({received_clock}, {sender_port}) from {PEER_NAMES[addr]}")
+        # Deserialize block and add it to blockchain
+        received_block = Block.from_dict(block_dict, self.block_lookup)
+        # self.blockchain.appendleft(received_block)
+        self.add_block(received_block.sender, received_block.receiver, received_block.amount)
+        self.block_lookup[received_block.hash] = received_block    
+        message = received_block.amount
+        if addr in PEER_NAMES:
+            print(f"Received from {PEER_NAMES[addr]}: {message}")
+        else:
+            print(f"Received from unknown peer {addr}: {message}")
+
     def listen(self):
         # Listen for incoming UDP messages
         print(f"Listening on {self.my_address[0]}:{self.my_address[1]}")
@@ -113,34 +203,68 @@ class Peer:
                 data, addr = self.socket.recvfrom(1024) # Receive message
                 message_data = json.loads(data.decode('utf-8'))
 
-                 # extract lamport pair and block
-                lamport_pair = message_data["lamport_pair"]
-                received_clock = lamport_pair["clock"]
-                sender_port = lamport_pair["port"]
-                block_dict = message_data["block"]
-
-                # Update the local clock based on the received Lamport pair
-                self.clock = max(self.clock, received_clock) + 1
-                print(f"Updated clock: {self.clock} after receiving Lamport pair: ({received_clock}, {sender_port}) from {PEER_NAMES[addr]}")
-
-                # Deserialize block and add it to blockchain
-                received_block = Block.from_dict(block_dict, self.block_lookup)
-                # self.blockchain.appendleft(received_block)
-                self.add_block(received_block.sender, received_block.receiver, received_block.amount)
-                self.block_lookup[received_block.hash] = received_block
-
-                message = received_block.amount
-                if addr in PEER_NAMES:
-                    print(f"Received from {PEER_NAMES[addr]}: {message}")
+                 # extract type and lamport pair and block
+                message_type = message_data["type"]
+                if message_type == "REQUEST":
+                    self.handle_request(message_data, addr)
+                elif message_type == "ACK":
+                    self.handle_ack(message_data, addr)
+                elif message_type == "RELEASE":
+                    self.handle_release(message_data)
+                elif message_type == "BLOCK":
+                    lamport_pair = message_data["lamport_pair"]
+                    self.handle_block(message_data["block"], addr, lamport_pair)
                 else:
-                    print(f"Received from unknown peer {addr}: {message}")
+                    print(f"Unknown message type received from {addr}: {message_data}")
+
+                # lamport_pair = message_data["lamport_pair"]
+                # received_clock = lamport_pair["clock"]
+                # sender_port = lamport_pair["port"]
+                # block_dict = message_data["block"]
+
+                # # Update the local clock based on the received Lamport pair
+                # self.clock = max(self.clock, received_clock) + 1
+                # print(f"\nUpdated clock: {self.clock} after receiving Lamport pair: ({received_clock}, {sender_port}) from {PEER_NAMES[addr]}")
+
+                # # Deserialize block and add it to blockchain
+                # received_block = Block.from_dict(block_dict, self.block_lookup)
+                # # self.blockchain.appendleft(received_block)
+                # self.add_block(received_block.sender, received_block.receiver, received_block.amount)
+                # self.block_lookup[received_block.hash] = received_block
+
+                # message = received_block.amount
+                # if addr in PEER_NAMES:
+                #     print(f"Received from {PEER_NAMES[addr]}: {message}")
+                # else:
+                #     print(f"Received from unknown peer {addr}: {message}")
             except socket.timeout:
                 continue  # Ignore timeouts and keep checking for messages
             except Exception as e:
                 print(f"Error receiving data: {e}")
                 break
+    
+    def broadcast_message(self, message):
+        # Broadcast message to all other peers
+        # serialize message
+        serialized_message = json.dumps(message).encode('utf-8') 
+        # Iterate over all peer addresses and send the message
+        for peer in self.peer_addresses:
+            try:
+                self.socket.sendto(serialized_message, peer)  # Send the message via UDP
+                print(f"Broadcasted message to {peer}: {message}")
+            except Exception as e:
+                print(f"Error broadcasting to {peer}: {e}")
 
     def send_message(self, message, receiver):
+        # serialize message
+        serialized_message = json.dumps(message).encode('utf-8') 
+        try:
+            self.socket.sendto(serialized_message, receiver)  # Send the message via UDP
+            print(f"Sent message to {receiver}: {message}")
+        except Exception as e:
+            print(f"Error broadcasting to {receiver}: {e}")
+
+    def send_block(self, message, receiver):
         # Broadcast message to all other peers
         # make sure to only accept int messages!!
         # send event: increment clock
@@ -151,12 +275,13 @@ class Peer:
         block = self.blockchain[0]
         block_dict = block.to_dict()
         message_data = {
-        "block": block_dict,
-        "lamport_pair": {
-            "clock": self.clock,  # current logical clock
-            "port": self.my_address[1]  # process ID (port number)
+            "type": "BLOCK",
+            "block": block_dict,
+            "lamport_pair": {
+                "clock": self.clock,  # current logical clock
+                "port": self.my_address[1]  # process ID (port number)
+            }
         }
-    }
         serialized_block = json.dumps(message_data).encode('utf-8')
 
         for peer in self.peer_addresses:
@@ -179,7 +304,7 @@ class Peer:
                 break
             else:
                 receiver = int(input("Enter receiver (1, 2, or 3): "))
-            self.send_message(message, receiver)
+            self.send_block(message, receiver)
 
         self.socket.close()
         print("Socket closed.")
