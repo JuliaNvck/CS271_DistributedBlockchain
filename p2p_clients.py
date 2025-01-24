@@ -130,6 +130,9 @@ class Peer:
                 print("  Previous Block Hash: None (Genesis Block)")
         print("End of Blockchain\n")
 
+    def print_balance_table(self):
+        print(f"Balance Table: {self.balance_table}")
+
     def add_block(self, sender, receiver, amount):
         # get block currently at head of blockchain
         prev_block = self.blockchain[0]
@@ -382,7 +385,7 @@ class Peer:
 
         # Allow the user to send messages
         while self.running:
-            operation_num = input("Would you like to issue a transaction, view balance, or print the blockchain? (0, 1, 2) (type 'exit' to quit): ")
+            operation_num = input("Would you like to issue a transaction, view balance, print the blockchain, or print the balance table? (0, 1, 2, 3) (type 'exit' to quit): ")
             if operation_num.lower() == "exit": # user inputs 'exit'
                 print("Exiting...")
                 self.running = False  # Stop listener thread
@@ -403,6 +406,9 @@ class Peer:
             elif int(operation_num) == 2:
                 # print blockchain
                 self.print_blockchain()
+            elif int(operation_num) == 3:
+                # print balance table
+                self.print_balance_table()
 
         self.socket.close()
         print("Socket closed.")
