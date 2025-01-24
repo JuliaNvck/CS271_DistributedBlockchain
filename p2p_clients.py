@@ -115,6 +115,21 @@ class Peer:
         else:
             print(f"FAILED! Insufficient balance: {self.balance_table[sender_port]}")
 
+    def print_blockchain(self):
+        # Print the details of each block in the client's blockchain
+        print(f"\nBlockchain for {self.my_address[1]} (most recent block first):")
+        # Iterate through deque
+        for block in self.blockchain:
+            print(f"Block Hash: {block.hash}")
+            print(f"  Sender: {block.sender}")
+            print(f"  Receiver: {block.receiver}")
+            print(f"  Amount: {block.amount}")
+            if block.hash_pointer:
+                print(f"  Previous Block Hash: {block.hash_pointer.previous_hash}")
+            else:
+                print("  Previous Block Hash: None (Genesis Block)")
+        print("End of Blockchain\n")
+
     def add_block(self, sender, receiver, amount):
         # get block currently at head of blockchain
         prev_block = self.blockchain[0]
@@ -367,14 +382,27 @@ class Peer:
 
         # Allow the user to send messages
         while self.running:
-            message = input("Enter message to send (type 'exit' to quit): ")
-            if message.lower() == "exit": # user inputs 'exit'
+            operation_num = input("Would you like to issue a transaction, view balance, or print the blockchain? (0, 1, 2) (type 'exit' to quit): ")
+            if operation_num.lower() == "exit": # user inputs 'exit'
                 print("Exiting...")
                 self.running = False  # Stop listener thread
                 break
-            else:
-                receiver = int(input("Enter receiver (1, 2, or 3): "))
-            self.send_block(message, receiver)
+            if int(operation_num) == 0:
+                # issue transaction
+                message = input("Enter amount to transfer (type 'exit' to quit): ")
+                if message.lower() == "exit": # user inputs 'exit'
+                    print("Exiting...")
+                    self.running = False  # Stop listener thread
+                    break
+                else:
+                    receiver = int(input("Enter receiver (1, 2, or 3): "))
+                self.send_block(message, receiver)
+            elif int(operation_num) == 1:
+                # view balance
+                print(f"Balance: {self.get_balance(self.my_address[1])}")
+            elif int(operation_num) == 2:
+                # print blockchain
+                self.print_blockchain()
 
         self.socket.close()
         print("Socket closed.")
