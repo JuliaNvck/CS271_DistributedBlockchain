@@ -276,6 +276,8 @@ class Peer:
         # serialize message
         serialized_message = json.dumps(message).encode('utf-8') 
         try:
+            # Add a delay of 3 seconds
+            time.sleep(3)
             self.socket.sendto(serialized_message, receiver)  # Send the message via UDP
             print(f"Sent message to {receiver}: {message}")
         except Exception as e:
