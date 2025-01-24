@@ -89,6 +89,7 @@ class Peer:
         self.queue = []  # Request priority queue
         self.ack_set = set()  # Set to track ACKs
         self.mutex = False  # Mutex flag
+        self.balance_table = {5000:10, 5001:10, 5002:10} # balance table dict, each client starts with 10$
 
     def initialize_blockchain(self):
         # Create the genesis block
@@ -96,6 +97,23 @@ class Peer:
         self.blockchain.appendleft(genesis_block)  # Add the genesis block to the queue
         self.block_lookup[genesis_block.hash] = genesis_block
         print("Blockchain initialized with Genesis block.")
+
+    def get_balance(self, port_num):
+        # get balance of specific peer or self
+        return self.balance_table.get(port_num, 0)
+
+    def can_afford_transfer(self, sender_port, amount):
+        # determine if client can afford transfer
+        return self.get_balance(sender_port) >= amount
+    
+    def update_balance_table(self, sender_port, receiver_port, amount):
+        # update balance table based on transaction
+        if self.can_afford_transfer(sender_port, amount):
+            self.balance_table[sender_port] -= amount
+            self.balance_table[receiver_port] += amount
+            print(f"SUCCESS! Updated balances: {self.balance_table}")
+        else:
+            print(f"FAILED! Insufficient balance: {self.balance_table[sender_port]}")
 
     def add_block(self, sender, receiver, amount):
         # get block currently at head of blockchain
@@ -196,6 +214,11 @@ class Peer:
             print(f"Received from {PEER_NAMES[addr]}: {message}")
         else:
             print(f"Received from unknown peer {addr}: {message}")
+        # update balance table
+        # receiver_port = DEFAULT_PEERS[received_block.receiver - 1][1]
+        print(f"Balance before transfer: {self.get_balance(self.my_address[1])}")
+        self.update_balance_table(sender_port, received_block.receiver[1], message)
+        print(f"Balance after transfer: {self.get_balance(self.my_address[1])}")
 
     def listen(self):
         # Listen for incoming UDP messages
@@ -297,31 +320,45 @@ class Peer:
 
         # Critical section: Add block to the blockchain
         print("Mutex granted. Entering critical section to add block.")
-        # add block to head of blockchain
-        self.add_block(self.my_address, DEFAULT_PEERS[receiver - 1], int(message))
-        # Broadcast message to all other peers
-        # serialize block and attach lamport pair (clock, port)
-        block = self.blockchain[0]
-        block_dict = block.to_dict()
-        message_data = {
-            "type": "BLOCK",
-            "block": block_dict,
-            "lamport_pair": (self.clock, self.my_address[1])
-        }
-        self.broadcast_message(message_data)
+        amount = int(message)
+        #  verify if client has enough balance to issue this transfer
+        if not self.can_afford_transfer(self.my_address[1], amount):
+            print("FAILED! Insufficient Balance.")
+            # Release the mutex
+            self.release_mutex()
+            print("Exiting critical section and releasing mutex.")
+        else: # sufficient balance
+            # add block to head of blockchain
+            self.add_block(self.my_address, DEFAULT_PEERS[receiver - 1], amount)
+            # Broadcast message to all other peers
+            # serialize block and attach lamport pair (clock, port)
+            block = self.blockchain[0]
+            block_dict = block.to_dict()
+            message_data = {
+                "type": "BLOCK",
+                "block": block_dict,
+                "lamport_pair": (self.clock, self.my_address[1])
+            }
+            self.broadcast_message(message_data)
 
-        # serialized_block = json.dumps(message_data).encode('utf-8')
+            # update balance table
+            receiver_port = DEFAULT_PEERS[receiver - 1][1]
+            print(f"Balance before transfer: {self.get_balance(self.my_address[1])}")
+            self.update_balance_table(self.my_address[1], receiver_port, amount)
+            print(f"Balance after transfer: {self.get_balance(self.my_address[1])}")
 
-        # for peer in self.peer_addresses:
-        #     try:
-        #         self.socket.sendto(serialized_block, peer)
-        #         print(f"Sent to {PEER_NAMES[peer]}: {message} with Lamport pair: ({self.clock}, {self.my_address[1]})")
-        #     except Exception as e:
-        #         print(f"Error sending to {PEER_NAMES[peer]}: {e}")
+            # serialized_block = json.dumps(message_data).encode('utf-8')
 
-        # Release the mutex
-        self.release_mutex()
-        print("Exiting critical section and releasing mutex.")
+            # for peer in self.peer_addresses:
+            #     try:
+            #         self.socket.sendto(serialized_block, peer)
+            #         print(f"Sent to {PEER_NAMES[peer]}: {message} with Lamport pair: ({self.clock}, {self.my_address[1]})")
+            #     except Exception as e:
+            #         print(f"Error sending to {PEER_NAMES[peer]}: {e}")
+
+            # Release the mutex
+            self.release_mutex()
+            print("Exiting critical section and releasing mutex.")
 
 
     def run(self):
