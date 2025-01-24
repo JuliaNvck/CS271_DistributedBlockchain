@@ -24,7 +24,6 @@ class HashPointer:
         """Convert the HashPointer to a dictionary for serialization."""
         return {
             'previous_hash': self.previous_hash,
-            # Optional: include the sender and receiver of the previous block
             'previous_block': self.previous_block.to_dict() if self.previous_block else None
         }
 
@@ -168,6 +167,7 @@ class Peer:
         self.clock = max(self.clock, received_lamport_pair[0]) + 1  # Update clock
         heapq.heappush(self.queue, received_lamport_pair)  # Add the request to the priority queue
         print(f"Received REQUEST from {addr} with Lamport pair: {received_lamport_pair}")
+        print(f"Clock: {self.clock}")
         print(f"current queue: {self.queue}")
 
         # Send an ACK to sender
@@ -182,6 +182,7 @@ class Peer:
         self.clock = max(self.clock, received_lamport_pair[0]) + 1  # Update clock
         self.ack_set.add(addr)  # Add the sender to the ack_set
         print(f"Received ACK from {addr} with Lamport pair: {received_lamport_pair}. Current ack_set: {self.ack_set}")
+        print(f"Clock: {self.clock}")
 
         # Check if mutex can be granted
         self.check_mutex()
@@ -198,8 +199,8 @@ class Peer:
             self.mutex = False
             heapq.heappop(self.queue)  # Remove own request from the queue
 
-            # Broadcast a RELEASE message and increment clock
-            self.clock += 1
+            # Broadcast a RELEASE message
+            # self.clock += 1
             release_message = {
                 "type": "RELEASE",
                 "lamport_pair": (self.clock, self.my_address[1])
@@ -213,6 +214,7 @@ class Peer:
         self.queue = [req for req in self.queue if req[1] != released_lamport_pair[1]]  # Remove the released request
         heapq.heapify(self.queue)  # Rebuild the heap
         print(f"Processed RELEASE for Lamport pair: {released_lamport_pair}. Updated queue: {self.queue}")
+        print(f"Clock: {self.clock}")
         # Check if the mutex can be granted
         self.check_mutex()
 
@@ -261,26 +263,6 @@ class Peer:
                 else:
                     print(f"Unknown message type received from {addr}: {message_data}")
 
-                # lamport_pair = message_data["lamport_pair"]
-                # received_clock = lamport_pair["clock"]
-                # sender_port = lamport_pair["port"]
-                # block_dict = message_data["block"]
-
-                # # Update the local clock based on the received Lamport pair
-                # self.clock = max(self.clock, received_clock) + 1
-                # print(f"\nUpdated clock: {self.clock} after receiving Lamport pair: ({received_clock}, {sender_port}) from {PEER_NAMES[addr]}")
-
-                # # Deserialize block and add it to blockchain
-                # received_block = Block.from_dict(block_dict, self.block_lookup)
-                # # self.blockchain.appendleft(received_block)
-                # self.add_block(received_block.sender, received_block.receiver, received_block.amount)
-                # self.block_lookup[received_block.hash] = received_block
-
-                # message = received_block.amount
-                # if addr in PEER_NAMES:
-                #     print(f"Received from {PEER_NAMES[addr]}: {message}")
-                # else:
-                #     print(f"Received from unknown peer {addr}: {message}")
             except socket.timeout:
                 continue  # Ignore timeouts and keep checking for messages
             except Exception as e:
@@ -289,10 +271,7 @@ class Peer:
     
     def broadcast_message(self, message):
         # Broadcast message to all other peers
-        # serialize message
-        # serialized_message = json.dumps(message).encode('utf-8') 
-        # Iterate over all peer addresses and send the message
-        # Increment clock before each send event
+        # Increment clock before send event
         self.clock += 1
         # Update clock in message
         message["lamport_pair"] = (self.clock, self.my_address[1])
@@ -300,6 +279,8 @@ class Peer:
         serialized_message = json.dumps(message).encode('utf-8')
         # Add a delay of 3 seconds
         time.sleep(3)
+        print(f"Clock: {self.clock}")
+        # Iterate over all peer addresses and send the message
         for peer in self.peer_addresses:
             try:
                 # Add a delay of 3 seconds
@@ -316,6 +297,7 @@ class Peer:
         message["lamport_pair"] = (self.clock, self.my_address[1])
         # serialize message
         serialized_message = json.dumps(message).encode('utf-8') 
+        print(f"Clock: {self.clock}")
         try:
             # Add a delay of 3 seconds
             time.sleep(3)
@@ -364,15 +346,6 @@ class Peer:
             print(f"Balance before transfer: {self.get_balance(self.my_address[1])}")
             self.update_balance_table(self.my_address[1], receiver_port, amount)
             print(f"Balance after transfer: {self.get_balance(self.my_address[1])}")
-
-            # serialized_block = json.dumps(message_data).encode('utf-8')
-
-            # for peer in self.peer_addresses:
-            #     try:
-            #         self.socket.sendto(serialized_block, peer)
-            #         print(f"Sent to {PEER_NAMES[peer]}: {message} with Lamport pair: ({self.clock}, {self.my_address[1]})")
-            #     except Exception as e:
-            #         print(f"Error sending to {PEER_NAMES[peer]}: {e}")
 
             # Release the mutex
             self.release_mutex()
