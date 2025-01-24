@@ -152,7 +152,7 @@ class Peer:
 
     def check_mutex(self):
         # Check if the head of the queue is this process's request and received all ACKs
-        if self.queue[0][1] == self.my_address[1] and len(self.ack_set) == len(self.peer_addresses):
+        if self.queue and self.queue[0][1] == self.my_address[1] and len(self.ack_set) == len(self.peer_addresses):
             print("Mutex granted.")
             self.mutex = True
 
@@ -257,10 +257,12 @@ class Peer:
         message["lamport_pair"] = (self.clock, self.my_address[1])
         # serialize message
         serialized_message = json.dumps(message).encode('utf-8')
+        # Add a delay of 3 seconds
+        time.sleep(3)
         for peer in self.peer_addresses:
             try:
                 # Add a delay of 3 seconds
-                time.sleep(3)
+                # time.sleep(3)
                 self.socket.sendto(serialized_message, peer)  # Send the message via UDP
                 print(f"Broadcasted message to {peer}: {message}")
             except Exception as e:
