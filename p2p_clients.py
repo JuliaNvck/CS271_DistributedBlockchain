@@ -5,6 +5,7 @@ from collections import deque
 import json
 import hashlib
 import heapq
+import time
 
 
 # Predefined ports and IP addresses for the 3 peers
@@ -110,9 +111,7 @@ class Peer:
 
     def request_mutex(self):
         # increment clock and set lamport pair ⟨clock, port⟩
-        # DON'T NEED TO INC CLOCK HERE
-        self.clock += 1
-        lamport_pair = (self.clock, self.my_address[1])
+        lamport_pair = (self.clock + 1, self.my_address[1])
 
         # Add the request to the local priority queue (min heap)
         heapq.heappush(self.queue, lamport_pair)
@@ -133,6 +132,7 @@ class Peer:
         self.clock = max(self.clock, received_lamport_pair[0]) + 1  # Update clock
         heapq.heappush(self.queue, received_lamport_pair)  # Add the request to the priority queue
         print(f"Received REQUEST from {addr} with Lamport pair: {received_lamport_pair}")
+        print(f"current queue: {self.queue}")
 
         # Send an ACK to sender
         ack_message = {
@@ -177,6 +177,8 @@ class Peer:
         self.queue = [req for req in self.queue if req[1] != released_lamport_pair[1]]  # Remove the released request
         heapq.heapify(self.queue)  # Rebuild the heap
         print(f"Processed RELEASE for Lamport pair: {released_lamport_pair}. Updated queue: {self.queue}")
+        # Check if the mutex can be granted
+        self.check_mutex()
 
     def handle_block(self, block_dict, addr, lamport_pair):
         # Update the local clock based on the received Lamport pair
@@ -249,21 +251,26 @@ class Peer:
         # serialize message
         # serialized_message = json.dumps(message).encode('utf-8') 
         # Iterate over all peer addresses and send the message
+        # Increment clock before each send event
+        self.clock += 1
+        # Update clock in message
+        message["lamport_pair"] = (self.clock, self.my_address[1])
+        # serialize message
+        serialized_message = json.dumps(message).encode('utf-8')
         for peer in self.peer_addresses:
             try:
-                # Increment clock before each send event
-                self.clock += 1
-                # Update clock in message
-                message["lamport_pair"] = (self.clock, self.my_address[1])
-                
-                serialized_message = json.dumps(message).encode('utf-8') # serialize message
-
+                # Add a delay of 3 seconds
+                time.sleep(3)
                 self.socket.sendto(serialized_message, peer)  # Send the message via UDP
                 print(f"Broadcasted message to {peer}: {message}")
             except Exception as e:
                 print(f"Error broadcasting to {peer}: {e}")
 
     def send_message(self, message, receiver):
+        # Increment clock before each send event
+        self.clock += 1
+        # Update clock in message
+        message["lamport_pair"] = (self.clock, self.my_address[1])
         # serialize message
         serialized_message = json.dumps(message).encode('utf-8') 
         try:
@@ -286,8 +293,6 @@ class Peer:
 
         # Critical section: Add block to the blockchain
         print("Mutex granted. Entering critical section to add block.")
-        # do you need???: send event: increment clock
-        self.clock += 1
         # add block to head of blockchain
         self.add_block(self.my_address, DEFAULT_PEERS[receiver - 1], int(message))
         # Broadcast message to all other peers
