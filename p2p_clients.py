@@ -16,12 +16,13 @@ DEFAULT_PEERS = [
 ]
 
 class HashPointer:
+    # Hash pointer object with: 1. pointer to prev block 2. hash of previous block
     def __init__(self, previous_block, previous_hash):
         self.previous_block = previous_block  # Pointer to the previous block
         self.previous_hash = previous_hash    # Hash of the previous block
     
     def to_dict(self):
-        """Convert the HashPointer to a dictionary for serialization."""
+        # Convert the HashPointer to a dict for serialization
         return {
             'previous_hash': self.previous_hash,
             'previous_block': self.previous_block.to_dict() if self.previous_block else None
@@ -29,7 +30,7 @@ class HashPointer:
 
     @classmethod
     def from_dict(cls, obj_dict, blockchain_lookup):
-        """Reconstruct the HashPointer from a dictionary."""
+        # Reconstruct HashPointer from a dict
         previous_block = blockchain_lookup.get(obj_dict['previous_hash'])
         return cls(
             previous_block=previous_block,
@@ -37,15 +38,16 @@ class HashPointer:
         )
 
 class Block:
+    # Block object with sender, receiver, amount, hash pointer to the previous block, hash of the current block
     def __init__(self, sender, receiver, amount, hash_pointer=None):
         self.sender = sender
         self.receiver = receiver
         self.amount = amount
-        self.hash_pointer = hash_pointer  # Hash pointer to the previous block
-        self.hash = self.calculate_hash()  # Hash of the current block
+        self.hash_pointer = hash_pointer
+        self.hash = self.calculate_hash()
 
     def to_dict(self):
-        """Convert the Block object to a dictionary for serialization."""
+        # Convert Block object to a dict for serialization
         return {
             'sender': self.sender,
             'receiver': self.receiver,
@@ -56,7 +58,7 @@ class Block:
 
     @classmethod
     def from_dict(cls, obj_dict, blockchain_lookup):
-        """Reconstruct the Block object from a dictionary."""
+        # Reconstruct Block object from a dict
         hash_pointer = HashPointer.from_dict(obj_dict['hash_pointer'], blockchain_lookup) if obj_dict['hash_pointer'] else None
         return cls(
             sender=obj_dict['sender'],
@@ -66,25 +68,26 @@ class Block:
         )
     
     def calculate_hash(self):
+        # Calculate hash of a block
         block_data = f"{self.sender},{self.receiver},{self.amount},{self.hash_pointer.previous_hash if self.hash_pointer else 'Genesis'}"
         return hashlib.sha256(block_data.encode()).hexdigest()
 
 
 
-# Create a mapping of addresses to peer identifiers
+# Mapping of addresses to peer identifiers (peer 1, 2, 3)
 PEER_NAMES = {peer: f"Peer {i+1}" for i, peer in enumerate(DEFAULT_PEERS)}
 
 class Peer:
     def __init__(self, my_ip, my_port, peer_addresses):
         self.my_address = (my_ip, my_port) # initialize peer with address
         self.peer_addresses = peer_addresses # list of other peer's addresses
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # udp socket
         self.socket.bind(self.my_address) # bind to UDP socket
         self.running = True  # flag to control running state of listener thread
-        self.blockchain = deque()  # Initialize an empty queue for the Blockchain
+        self.blockchain = deque()  # initialize empty queue for the Blockchain
         self.block_lookup = {} # To look up blocks by hash
         self.initialize_blockchain()
-        self.clock = 0
+        self.clock = 0 # local clock
         self.queue = []  # Request priority queue
         self.ack_set = set()  # Set to track ACKs
         self.mutex = False  # Mutex flag
@@ -98,15 +101,15 @@ class Peer:
         print("Blockchain initialized with Genesis block.")
 
     def get_balance(self, port_num):
-        # get balance of specific peer or self
+        # Get balance of specific peer or self
         return self.balance_table.get(port_num, 0)
 
     def can_afford_transfer(self, sender_port, amount):
-        # determine if client can afford transfer
+        # Determine if client can afford transfer
         return self.get_balance(sender_port) >= amount
     
     def update_balance_table(self, sender_port, receiver_port, amount):
-        # update balance table based on transaction
+        # Update balance table based on transaction
         if self.can_afford_transfer(sender_port, amount):
             self.balance_table[sender_port] -= amount
             self.balance_table[receiver_port] += amount
@@ -117,7 +120,7 @@ class Peer:
     def print_blockchain(self):
         # Print the details of each block in the client's blockchain
         print(f"\nBlockchain for {self.my_address[1]} (most recent block first):")
-        # Iterate through deque
+        # Iterate through blockchain
         for block in self.blockchain:
             print(f"Block Hash: {block.hash}")
             print(f"  Sender: {block.sender}")
@@ -130,9 +133,11 @@ class Peer:
         print("End of Blockchain\n")
 
     def print_balance_table(self):
+        # Print the contents of the client's local copy of the balance table
         print(f"Balance Table: {self.balance_table}")
 
     def add_block(self, sender, receiver, amount):
+        # Add block to head of blockchain
         # get block currently at head of blockchain
         prev_block = self.blockchain[0]
         # create hash pointer for prev block
@@ -147,15 +152,12 @@ class Peer:
     def request_mutex(self):
         # increment clock and set lamport pair ⟨clock, port⟩
         lamport_pair = (self.clock + 1, self.my_address[1])
-
         # Add the request to the local priority queue (min heap)
         heapq.heappush(self.queue, lamport_pair)
         print(f"Requesting mutex with Lamport pair: {lamport_pair}")
-
-        # Clear the ack_set for the new request
+        # Clear ack_set (new request)
         self.ack_set.clear()
-        
-        # Broadcast the request to all clients
+        # Broadcast request to all clients
         request_message = {
             "type": "REQUEST",
             "lamport_pair": lamport_pair
@@ -163,9 +165,12 @@ class Peer:
         self.broadcast_message(request_message)
 
     def handle_request(self, message, addr):
+        # Handle received request
         received_lamport_pair = tuple(message["lamport_pair"])
-        self.clock = max(self.clock, received_lamport_pair[0]) + 1  # Update clock
-        heapq.heappush(self.queue, received_lamport_pair)  # Add the request to the priority queue
+        # update clock based on received message/lamport pair
+        self.clock = max(self.clock, received_lamport_pair[0]) + 1
+        # Add the request to the priority queue (lower timestamp, lower process id/port first)
+        heapq.heappush(self.queue, received_lamport_pair)
         print(f"Received REQUEST from {addr} with Lamport pair: {received_lamport_pair}")
         print(f"Clock: {self.clock}")
         print(f"current queue: {self.queue}")
@@ -178,9 +183,12 @@ class Peer:
         self.send_message(ack_message, addr)
 
     def handle_ack(self, message, addr):
+        # Handle received ACK
         received_lamport_pair = tuple(message["lamport_pair"])
-        self.clock = max(self.clock, received_lamport_pair[0]) + 1  # Update clock
-        self.ack_set.add(addr)  # Add the sender to the ack_set
+        # update clock based on received message/lamport pair
+        self.clock = max(self.clock, received_lamport_pair[0]) + 1
+        # add sender to the ack_set
+        self.ack_set.add(addr)
         print(f"Received ACK from {addr} with Lamport pair: {received_lamport_pair}. Current ack_set: {self.ack_set}")
         print(f"Clock: {self.clock}")
 
@@ -194,13 +202,14 @@ class Peer:
             self.mutex = True
 
     def release_mutex(self):
+        # Release mutex
         if self.mutex:
             print("Releasing mutex.")
             self.mutex = False
-            heapq.heappop(self.queue)  # Remove own request from the queue
+            # remove own request from request queue
+            heapq.heappop(self.queue)
 
-            # Broadcast a RELEASE message
-            # self.clock += 1
+            # broadcast RELEASE message
             release_message = {
                 "type": "RELEASE",
                 "lamport_pair": (self.clock, self.my_address[1])
@@ -208,25 +217,31 @@ class Peer:
             self.broadcast_message(release_message)
     
     def handle_release(self, message):
+        # Handle received release
         released_lamport_pair = tuple(message["lamport_pair"])
-        self.clock = max(self.clock, released_lamport_pair[0]) + 1  # Update clock
-        # self.queue = [req for req in self.queue if req != released_lamport_pair]  # Remove the released request
-        self.queue = [req for req in self.queue if req[1] != released_lamport_pair[1]]  # Remove the released request
-        heapq.heapify(self.queue)  # Rebuild the heap
+        # update clock based on received message/lamport pair
+        self.clock = max(self.clock, released_lamport_pair[0]) + 1
+        # remove the released request from request queue
+        self.queue = [req for req in self.queue if req[1] != released_lamport_pair[1]]
+        # rebuild the heap
+        heapq.heapify(self.queue)
         print(f"Processed RELEASE for Lamport pair: {released_lamport_pair}. Updated queue: {self.queue}")
         print(f"Clock: {self.clock}")
         # Check if the mutex can be granted
         self.check_mutex()
+        # print query again (after logging to console)
         if not self.mutex:
             print("Would you like to issue a transaction, view balance, print the blockchain, or print the balance table? (0, 1, 2, 3) (type 'exit' to quit): ")
 
     def handle_block(self, block_dict, addr, lamport_pair):
-        # Update the local clock based on the received Lamport pair
+        # Handle received block
+        # update clock based on received message/lamport pair
         received_clock = lamport_pair[0]
         sender_port = lamport_pair[1]
         self.clock = max(self.clock, received_clock) + 1
-        print(f"\nUpdated clock: {self.clock} after receiving Lamport pair: ({received_clock}, {sender_port}) from {PEER_NAMES[addr]}")
-        # Deserialize block and add it to blockchain
+        print(f"Clock: {self.clock}")
+        # print(f"\nUpdated clock: {self.clock} after receiving Lamport pair: ({received_clock}, {sender_port}) from {PEER_NAMES[addr]}")
+        # deserialize block and add it to blockchain
         received_block = Block.from_dict(block_dict, self.block_lookup)
         self.add_block(received_block.sender, received_block.receiver, received_block.amount)
         self.block_lookup[received_block.hash] = received_block    
@@ -245,11 +260,12 @@ class Peer:
         print(f"Listening on {self.my_address[0]}:{self.my_address[1]}")
         while self.running:
             try:
-                self.socket.settimeout(1)  # Set timeout to periodically check running flag
-                data, addr = self.socket.recvfrom(1024) # Receive message
-                message_data = json.loads(data.decode('utf-8'))
+                # set timeout to periodically check running flag
+                self.socket.settimeout(1)
+                data, addr = self.socket.recvfrom(1024) # receive message
+                message_data = json.loads(data.decode('utf-8')) # decode message
 
-                 # extract type and lamport pair and block
+                # extract type and lamport pair and block and handle message
                 message_type = message_data["type"]
                 if message_type == "REQUEST":
                     self.handle_request(message_data, addr)
@@ -264,73 +280,72 @@ class Peer:
                     print(f"Unknown message type received from {addr}: {message_data}")
 
             except socket.timeout:
-                continue  # Ignore timeouts and keep checking for messages
+                continue  # ignore timeouts and keep checking for messages
             except Exception as e:
                 print(f"Error receiving data: {e}")
                 break
     
     def broadcast_message(self, message):
         # Broadcast message to all other peers
-        # Increment clock before send event
+        # increment clock before send event
         self.clock += 1
-        # Update clock in message
+        # update clock in message
         message["lamport_pair"] = (self.clock, self.my_address[1])
         # serialize message
         serialized_message = json.dumps(message).encode('utf-8')
-        # Add a delay of 3 seconds
+        # add a delay of 3 seconds
         time.sleep(3)
         print(f"Clock: {self.clock}")
-        # Iterate over all peer addresses and send the message
+        # iterate over all peer addresses and send the message
         for peer in self.peer_addresses:
             try:
-                # Add a delay of 3 seconds
-                # time.sleep(3)
-                self.socket.sendto(serialized_message, peer)  # Send the message via UDP
+                self.socket.sendto(serialized_message, peer)  # send the message via UDP
                 print(f"Broadcasted message to {peer}: {message}")
             except Exception as e:
                 print(f"Error broadcasting to {peer}: {e}")
 
     def send_message(self, message, receiver):
-        # Increment clock before each send event
+        # Send message to specific peer
+        # increment clock for send event
         self.clock += 1
-        # Update clock in message
+        # update clock in message
         message["lamport_pair"] = (self.clock, self.my_address[1])
         # serialize message
         serialized_message = json.dumps(message).encode('utf-8') 
         print(f"Clock: {self.clock}")
         try:
-            # Add a delay of 3 seconds
+            # add a delay of 3 seconds
             time.sleep(3)
-            self.socket.sendto(serialized_message, receiver)  # Send the message via UDP
+            self.socket.sendto(serialized_message, receiver)  # send the message via UDP
             print(f"Sent message to {receiver}: {message}")
         except Exception as e:
             print(f"Error broadcasting to {receiver}: {e}")
 
     def send_block(self, message, receiver):
-        # Broadcast message to all other peers
-        # make sure to only accept int messages!!
+        # Broadcast block to all other peers
         
         # Request the mutex
+        # Broadcast REQUEST and wait for ACKs
         print("Requesting mutex before sending block...")
-        self.request_mutex()  # Broadcast REQUEST and wait for ACKs
+        self.request_mutex()
 
-        # Wait for mutex to be granted
+        # wait for mutex to be granted
         while not self.mutex:
             continue
 
-        # Critical section: Add block to the blockchain
+        # Critical section: Add block to blockchain
         print("Mutex granted. Entering critical section to add block.")
         amount = int(message)
-        #  verify if client has enough balance to issue this transfer
+        #  verify client has enough balance to issue this transfer
         if not self.can_afford_transfer(self.my_address[1], amount):
             print("FAILED! Insufficient Balance.")
-            # Release the mutex
+            # release mutex
             self.release_mutex()
             print("Exiting critical section and releasing mutex.")
         else: # sufficient balance
             # add block to head of blockchain
             self.add_block(self.my_address, DEFAULT_PEERS[receiver - 1], amount)
-            # Broadcast message to all other peers
+            # broadcast message to all other peers
             # serialize block and attach lamport pair (clock, port)
             block = self.blockchain[0]
             block_dict = block.to_dict()
@@ -347,7 +362,7 @@ class Peer:
             self.update_balance_table(self.my_address[1], receiver_port, amount)
             print(f"Balance after transfer: {self.get_balance(self.my_address[1])}")
 
-            # Release the mutex
+            # release the mutex
             self.release_mutex()
             print("Exiting critical section and releasing mutex.")
 
@@ -359,31 +374,30 @@ class Peer:
                 print("Exiting...")
                 self.running = False  # Stop listener thread
                 break
-            # Validate input is an int and within allowed range
+            # validate input is an int and within range - 0, 1, 2, 3
             if operation_num.isdigit() and 0 <= int(operation_num) <= 3:
-                operation_num = int(operation_num)  # Convert to integer
+                operation_num = int(operation_num)  # convert to int
                 
                 if operation_num == 0:
-                    # Issue transaction
+                    # issue transaction
                     while True:
                         message = input("Enter amount to transfer (type 'exit' to quit): ")
-                        
-                        # Check if the user wants to exit
+                        # check if user wants to exit
                         if message.lower() == "exit":
                             print("Exiting...")
                             self.running = False
                             break
                         
-                        # Validate input is an int
+                        # validate input is an int
                         if message.isdigit():
                             message = int(message)
                             receiver = input("Enter receiver (1, 2, or 3): ")
                             
-                            # Validate receiver input
+                            # validate receiver input
                             if receiver.isdigit() and 1 <= int(receiver) <= 3:
                                 receiver = int(receiver)
                                 self.send_block(message, receiver)
-                                break  # Exit the loop after sending the block
+                                break  # exit loop after sending block
                             else:
                                 print("Invalid receiver. Please enter 1, 2, or 3.")
                         else:
@@ -392,23 +406,21 @@ class Peer:
                 elif operation_num == 1:
                     # View balance
                     print(f"Balance: {self.get_balance(self.my_address[1])}")
-                
                 elif operation_num == 2:
                     # Print blockchain
                     self.print_blockchain()
-                
                 elif operation_num == 3:
                     # Print balance table
                     self.print_balance_table()
-            
             else:
-                # Invalid input
+                # invalid input
                 print("Invalid input. Please enter 0, 1, 2, or 3, or type 'exit' to quit.")
 
 
     def run(self):
         # Start listening thread
         threading.Thread(target=self.listen, daemon=True).start()
+        # get user input & handle
         self.get_user_input()
 
         self.socket.close()
@@ -417,8 +429,8 @@ class Peer:
 def main():
     # read client’s port as arg (run on local host IP) from CLI
     if len(sys.argv) < 2:
-        print("Usage: python3 udp_p2p.py <my_ip> <my_port>")
-        print("Example: python3 udp_p2p.py 127.0.0.1 5000")
+        print("Usage: python3 udp_p2p.py <my_port>")
+        print("Example: python3 udp_p2p.py 5000")
         sys.exit(1)
 
     my_ip = "127.0.0.1"
@@ -427,7 +439,7 @@ def main():
     # Exclude this peer's address from the list of peers
     peer_addresses = [addr for addr in DEFAULT_PEERS if addr != (my_ip, my_port)]
 
-    # Create and run the peer instance
+    # Create and run peer instance
     peer = Peer(my_ip, my_port, peer_addresses)
     peer.run()
 
