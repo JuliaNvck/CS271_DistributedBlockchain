@@ -354,32 +354,93 @@ class Peer:
         # Start listening thread
         threading.Thread(target=self.listen, daemon=True).start()
 
+        # # Allow the user to send messages
+        # while self.running:
+        #     operation_num = input("Would you like to issue a transaction, view balance, print the blockchain, or print the balance table? (0, 1, 2, 3) (type 'exit' to quit): ")
+        #     if operation_num.lower() == "exit": # user inputs 'exit'
+        #         print("Exiting...")
+        #         self.running = False  # Stop listener thread
+        #         break
+        #     elif int(operation_num) == 0:
+        #         # issue transaction
+        #         message = input("Enter amount to transfer (type 'exit' to quit): ")
+        #         if message.lower() == "exit": # user inputs 'exit'
+        #             print("Exiting...")
+        #             self.running = False  # Stop listener thread
+        #             break
+        #         elif type(message) is not int:
+        #             print(f"Invalid input: {operation_num}")
+        #             print("Enter 1, 2, or 3, or exit to quit>")
+        #         else:
+        #             receiver = int(input("Enter receiver (1, 2, or 3): "))
+        #         self.send_block(message, receiver)
+        #     elif int(operation_num) == 1:
+        #         # view balance
+        #         print(f"Balance: {self.get_balance(self.my_address[1])}")
+        #     elif int(operation_num) == 2:
+        #         # print blockchain
+        #         self.print_blockchain()
+        #     elif int(operation_num) == 3:
+        #         # print balance table
+        #         self.print_balance_table()
+        #     else:
+        #         print(f"Invalid input: {operation_num}")
+        #         print("Enter 0, 1, 2, or 3, or exit to quit>")
+
         # Allow the user to send messages
         while self.running:
             operation_num = input("Would you like to issue a transaction, view balance, print the blockchain, or print the balance table? (0, 1, 2, 3) (type 'exit' to quit): ")
-            if operation_num.lower() == "exit": # user inputs 'exit'
+            # Check if the user wants to exit
+            if operation_num.lower() == "exit":
                 print("Exiting...")
                 self.running = False  # Stop listener thread
                 break
-            if int(operation_num) == 0:
-                # issue transaction
-                message = input("Enter amount to transfer (type 'exit' to quit): ")
-                if message.lower() == "exit": # user inputs 'exit'
-                    print("Exiting...")
-                    self.running = False  # Stop listener thread
-                    break
-                else:
-                    receiver = int(input("Enter receiver (1, 2, or 3): "))
-                self.send_block(message, receiver)
-            elif int(operation_num) == 1:
-                # view balance
-                print(f"Balance: {self.get_balance(self.my_address[1])}")
-            elif int(operation_num) == 2:
-                # print blockchain
-                self.print_blockchain()
-            elif int(operation_num) == 3:
-                # print balance table
-                self.print_balance_table()
+            # Validate input is an int and within allowed range
+            if operation_num.isdigit() and 0 <= int(operation_num) <= 3:
+                operation_num = int(operation_num)  # Convert to integer
+                
+                if operation_num == 0:
+                    # Issue transaction
+                    while True:
+                        message = input("Enter amount to transfer (type 'exit' to quit): ")
+                        
+                        # Check if the user wants to exit
+                        if message.lower() == "exit":
+                            print("Exiting...")
+                            self.running = False
+                            break
+                        
+                        # Validate input is an int
+                        if message.isdigit():
+                            message = int(message)
+                            receiver = input("Enter receiver (1, 2, or 3): ")
+                            
+                            # Validate receiver input
+                            if receiver.isdigit() and 1 <= int(receiver) <= 3:
+                                receiver = int(receiver)
+                                self.send_block(message, receiver)
+                                break  # Exit the loop after sending the block
+                            else:
+                                print("Invalid receiver. Please enter 1, 2, or 3.")
+                        else:
+                            print("Invalid amount. Please enter a valid integer.")
+                
+                elif operation_num == 1:
+                    # View balance
+                    print(f"Balance: {self.get_balance(self.my_address[1])}")
+                
+                elif operation_num == 2:
+                    # Print blockchain
+                    self.print_blockchain()
+                
+                elif operation_num == 3:
+                    # Print balance table
+                    self.print_balance_table()
+            
+            else:
+                # Invalid input
+                print("Invalid input. Please enter 0, 1, 2, or 3, or type 'exit' to quit.")
+
 
         self.socket.close()
         print("Socket closed.")
