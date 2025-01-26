@@ -217,6 +217,8 @@ class Peer:
         print(f"Clock: {self.clock}")
         # Check if the mutex can be granted
         self.check_mutex()
+        if not self.mutex:
+            print("Would you like to issue a transaction, view balance, print the blockchain, or print the balance table? (0, 1, 2, 3) (type 'exit' to quit): ")
 
     def handle_block(self, block_dict, addr, lamport_pair):
         # Update the local clock based on the received Lamport pair
@@ -408,7 +410,7 @@ class Peer:
         # Start listening thread
         threading.Thread(target=self.listen, daemon=True).start()
         self.get_user_input()
-        
+
         self.socket.close()
         print("Socket closed.")
 
