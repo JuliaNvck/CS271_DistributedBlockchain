@@ -226,16 +226,14 @@ class Peer:
         print(f"\nUpdated clock: {self.clock} after receiving Lamport pair: ({received_clock}, {sender_port}) from {PEER_NAMES[addr]}")
         # Deserialize block and add it to blockchain
         received_block = Block.from_dict(block_dict, self.block_lookup)
-        # self.blockchain.appendleft(received_block)
         self.add_block(received_block.sender, received_block.receiver, received_block.amount)
         self.block_lookup[received_block.hash] = received_block    
         message = received_block.amount
         if addr in PEER_NAMES:
-            print(f"Received from {PEER_NAMES[addr]}: {message}")
+            print(f"Received from {PEER_NAMES[addr]}: {message} to {PEER_NAMES[tuple(received_block.receiver)]}")
         else:
             print(f"Received from unknown peer {addr}: {message}")
         # update balance table
-        # receiver_port = DEFAULT_PEERS[received_block.receiver - 1][1]
         print(f"Balance before transfer: {self.get_balance(self.my_address[1])}")
         self.update_balance_table(sender_port, received_block.receiver[1], message)
         print(f"Balance after transfer: {self.get_balance(self.my_address[1])}")
