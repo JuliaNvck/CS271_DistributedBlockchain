@@ -349,45 +349,7 @@ class Peer:
             self.release_mutex()
             print("Exiting critical section and releasing mutex.")
 
-
-    def run(self):
-        # Start listening thread
-        threading.Thread(target=self.listen, daemon=True).start()
-
-        # # Allow the user to send messages
-        # while self.running:
-        #     operation_num = input("Would you like to issue a transaction, view balance, print the blockchain, or print the balance table? (0, 1, 2, 3) (type 'exit' to quit): ")
-        #     if operation_num.lower() == "exit": # user inputs 'exit'
-        #         print("Exiting...")
-        #         self.running = False  # Stop listener thread
-        #         break
-        #     elif int(operation_num) == 0:
-        #         # issue transaction
-        #         message = input("Enter amount to transfer (type 'exit' to quit): ")
-        #         if message.lower() == "exit": # user inputs 'exit'
-        #             print("Exiting...")
-        #             self.running = False  # Stop listener thread
-        #             break
-        #         elif type(message) is not int:
-        #             print(f"Invalid input: {operation_num}")
-        #             print("Enter 1, 2, or 3, or exit to quit>")
-        #         else:
-        #             receiver = int(input("Enter receiver (1, 2, or 3): "))
-        #         self.send_block(message, receiver)
-        #     elif int(operation_num) == 1:
-        #         # view balance
-        #         print(f"Balance: {self.get_balance(self.my_address[1])}")
-        #     elif int(operation_num) == 2:
-        #         # print blockchain
-        #         self.print_blockchain()
-        #     elif int(operation_num) == 3:
-        #         # print balance table
-        #         self.print_balance_table()
-        #     else:
-        #         print(f"Invalid input: {operation_num}")
-        #         print("Enter 0, 1, 2, or 3, or exit to quit>")
-
-        # Allow the user to send messages
+    def get_user_input(self):
         while self.running:
             operation_num = input("Would you like to issue a transaction, view balance, print the blockchain, or print the balance table? (0, 1, 2, 3) (type 'exit' to quit): ")
             # Check if the user wants to exit
@@ -442,6 +404,11 @@ class Peer:
                 print("Invalid input. Please enter 0, 1, 2, or 3, or type 'exit' to quit.")
 
 
+    def run(self):
+        # Start listening thread
+        threading.Thread(target=self.listen, daemon=True).start()
+        self.get_user_input()
+        
         self.socket.close()
         print("Socket closed.")
 
