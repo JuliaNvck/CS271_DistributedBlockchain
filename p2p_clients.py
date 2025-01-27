@@ -368,6 +368,7 @@ class Peer:
 
     def get_user_input(self):
         while self.running:
+            print(f"Balance: {self.get_balance(self.my_address[1])}")
             operation_num = input("Would you like to issue a transaction, view balance, print the blockchain, or print the balance table? (0, 1, 2, 3) (type 'exit' to quit): ")
             # Check if the user wants to exit
             if operation_num.lower() == "exit":
