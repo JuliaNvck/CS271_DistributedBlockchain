@@ -138,6 +138,7 @@ class Peer:
 
     def add_block(self, sender, receiver, amount):
         # Add block to head of blockchain
+        self.clock += 1  # increment clock for local event
         # get block currently at head of blockchain
         prev_block = self.blockchain[0]
         # create hash pointer for prev block
