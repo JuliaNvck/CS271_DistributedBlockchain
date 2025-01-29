@@ -143,7 +143,7 @@ class Peer:
         prev_block = self.blockchain[0]
         # create hash pointer for prev block
         hash_pointer = HashPointer(prev_block, prev_block.hash)
-        # create new block
+        # create new blockac
         block = Block(sender, receiver, amount, hash_pointer)
         # add new block to head of blockchain
         self.blockchain.appendleft(block)
@@ -369,7 +369,6 @@ class Peer:
 
     def get_user_input(self):
         while self.running:
-            print(f"Balance: {self.get_balance(self.my_address[1])}")
             operation_num = input("Would you like to issue a transaction, view balance, print the blockchain, or print the balance table? (0, 1, 2, 3) (type 'exit' to quit): ")
             # Check if the user wants to exit
             if operation_num.lower() == "exit":
@@ -423,6 +422,7 @@ class Peer:
         # Start listening thread
         threading.Thread(target=self.listen, daemon=True).start()
         # get user input & handle
+        print(f"Balance: {self.get_balance(self.my_address[1])}")
         self.get_user_input()
 
         self.socket.close()
