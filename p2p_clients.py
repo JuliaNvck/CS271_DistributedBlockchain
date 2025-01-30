@@ -254,7 +254,7 @@ class Peer:
         # add block to blockchain
         self.add_block(received_block.sender, received_block.receiver, received_block.amount)
         self.block_lookup[received_block.hash] = received_block    
-        
+
         # update balance table
         print(f"Balance before transfer: {self.get_balance(self.my_address[1])}")
         self.update_balance_table(sender_port, received_block.receiver[1], message)
@@ -267,7 +267,7 @@ class Peer:
             try:
                 # set timeout to periodically check running flag
                 self.socket.settimeout(1)
-                data, addr = self.socket.recvfrom(1024) # receive message
+                data, addr = self.socket.recvfrom(2048) # receive message
                 message_data = json.loads(data.decode('utf-8')) # decode message
 
                 # extract type and lamport pair and block and handle message
@@ -321,7 +321,7 @@ class Peer:
             # add a delay of 3 seconds
             time.sleep(3)
             self.socket.sendto(serialized_message, receiver)  # send the message via UDP
-            print(f"Sent message to {receiver}: {message}")
+            print(f"Sent message to {PEER_NAMES[receiver]}: {message['type']}")
         except Exception as e:
             print(f"Error broadcasting to {receiver}: {e}")
         print(f"Clock: {self.clock}")
