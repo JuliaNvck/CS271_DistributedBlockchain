@@ -285,8 +285,10 @@ class Peer:
                     print(f"Unknown message type received from {addr}: {message_data}")
 
             except socket.timeout:
+                # don't need to increment clock on message loss or drop since using udp on local host
                 continue  # ignore timeouts and keep checking for messages
             except Exception as e:
+                # don't need to increment clock on message loss or drop since using udp on local host
                 print(f"Error receiving data: {e}")
                 break
     
@@ -338,7 +340,8 @@ class Peer:
         while not self.mutex:
             continue
 
-        # Critical section: Add block to blockchain
+        # Critical section: Add block to blockchain and update balance table
+        # Operations are atomic with respect to other processes
         try:
             print("Mutex granted. Entering critical section to add block.")
             amount = int(message)
