@@ -234,7 +234,7 @@ class Peer:
         self.check_mutex()
         # print query again (after logging to console)
         if not self.mutex:
-            print("Would you like to issue a transaction, view balance, print the blockchain, or print the balance table? (0, 1, 2, 3) (type 'exit' to quit): ")
+            print("Would you like to issue a transaction (0), view balance (1), print the blockchain (2), or print the balance table(3)? (type 0, 1, 2, or 3) (type 'exit' to quit): ")
 
     def handle_block(self, block_dict, addr, lamport_pair):
         # Handle received block
@@ -246,7 +246,7 @@ class Peer:
         received_block = Block.from_dict(block_dict, self.block_lookup)
         message = received_block.amount
         if addr in PEER_NAMES:
-            print(f"Received from {PEER_NAMES[addr]}: {message} to {PEER_NAMES[tuple(received_block.receiver)]}")
+            print(f"Received from {PEER_NAMES[addr]} (with clock: {received_clock}): {message} to {PEER_NAMES[tuple(received_block.receiver)]}")
         else:
             print(f"Received from unknown peer {addr}: {message}")
         print(f"Clock: {self.clock}")
@@ -373,7 +373,7 @@ class Peer:
 
     def get_user_input(self):
         while self.running:
-            operation_num = input("Would you like to issue a transaction, view balance, print the blockchain, or print the balance table? (0, 1, 2, 3) (type 'exit' to quit): ")
+            operation_num = input("Would you like to issue a transaction (0), view balance (1), print the blockchain (2), or print the balance table(3)? (type 0, 1, 2, or 3) (type 'exit' to quit): ")
             # Check if the user wants to exit
             if operation_num.lower() == "exit":
                 print("Exiting...")
