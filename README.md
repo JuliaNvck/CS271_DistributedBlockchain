@@ -21,9 +21,9 @@ The project is implemented in Python and uses UDP for communication between clie
 
 ---
  ## Run with these commands in seperate terminals for peer 1, peer 2, peer 3
- python3 udp_p2p.py 5000
- python3 udp_p2p.py 5001
- python3 udp_p2p.py 5002
+-  python3 udp_p2p.py 5000
+-  python3 udp_p2p.py 5001
+-  python3 udp_p2p.py 5002
 
 ## Once all clients are running, you can interact with them using the following commands:
 - Transfer Money: Enter the amount to transfer and the recipient's number (1, 2, or 3)
@@ -34,11 +34,11 @@ The project is implemented in Python and uses UDP for communication between clie
 ## Implementation Details
 1. Blockchain
 - Each block contains:
-- Sender: The client sending the money.
-- Receiver: The client receiving the money.
-- Amount: The amount of money transferred.
-- Hash Pointer: A pointer to the previous block and its hash (SHA-256).
-The blockchain is implemented as a deque for efficient insertion at the head.
+  - Sender: The client sending the money.
+  - Receiver: The client receiving the money.
+  - Amount: The amount of money transferred.
+  - Hash Pointer: A pointer to the previous block and its hash (SHA-256).
+- The blockchain is implemented as a deque for efficient insertion at the head.
 
 2. Balance Table
 - The balance table is a dictionary that maps client ports to their balances.
