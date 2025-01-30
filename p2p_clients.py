@@ -148,7 +148,8 @@ class Peer:
         # add new block to head of blockchain
         self.blockchain.appendleft(block)
         self.block_lookup[block.hash] = block
-        print(f"New block added to the head: {block.hash}")
+        print("New block added to the head.")
+        print(f"Clock: {self.clock}")
 
     def request_mutex(self):
         # increment clock and set lamport pair ⟨clock, port⟩
@@ -172,7 +173,7 @@ class Peer:
         self.clock = max(self.clock, received_lamport_pair[0]) + 1
         # Add the request to the priority queue (lower timestamp, lower process id/port first)
         heapq.heappush(self.queue, received_lamport_pair)
-        print(f"Received REQUEST from {addr} with Lamport pair: {received_lamport_pair}")
+        print(f"\nReceived REQUEST from {PEER_NAMES[addr]} with Lamport pair: {received_lamport_pair}")
         print(f"Clock: {self.clock}")
         print(f"current queue: {self.queue}")
 
@@ -190,7 +191,8 @@ class Peer:
         self.clock = max(self.clock, received_lamport_pair[0]) + 1
         # add sender to the ack_set
         self.ack_set.add(addr)
-        print(f"Received ACK from {addr} with Lamport pair: {received_lamport_pair}. Current ack_set: {self.ack_set}")
+        print(f"Received ACK from {PEER_NAMES[addr]} with Lamport pair: {received_lamport_pair}")
+        # print(f"Current ack_set: {self.ack_set}")
         print(f"Clock: {self.clock}")
 
         # Check if mutex can be granted
@@ -240,17 +242,19 @@ class Peer:
         received_clock = lamport_pair[0]
         sender_port = lamport_pair[1]
         self.clock = max(self.clock, received_clock) + 1
-        print(f"Clock: {self.clock}")
-        # print(f"\nUpdated clock: {self.clock} after receiving Lamport pair: ({received_clock}, {sender_port}) from {PEER_NAMES[addr]}")
-        # deserialize block and add it to blockchain
+        # deserialize block
         received_block = Block.from_dict(block_dict, self.block_lookup)
-        self.add_block(received_block.sender, received_block.receiver, received_block.amount)
-        self.block_lookup[received_block.hash] = received_block    
         message = received_block.amount
         if addr in PEER_NAMES:
             print(f"Received from {PEER_NAMES[addr]}: {message} to {PEER_NAMES[tuple(received_block.receiver)]}")
         else:
             print(f"Received from unknown peer {addr}: {message}")
+        print(f"Clock: {self.clock}")
+
+        # add block to blockchain
+        self.add_block(received_block.sender, received_block.receiver, received_block.amount)
+        self.block_lookup[received_block.hash] = received_block    
+        
         # update balance table
         print(f"Balance before transfer: {self.get_balance(self.my_address[1])}")
         self.update_balance_table(sender_port, received_block.receiver[1], message)
@@ -296,14 +300,14 @@ class Peer:
         serialized_message = json.dumps(message).encode('utf-8')
         # add a delay of 3 seconds
         time.sleep(3)
-        print(f"Clock: {self.clock}")
         # iterate over all peer addresses and send the message
         for peer in self.peer_addresses:
             try:
                 self.socket.sendto(serialized_message, peer)  # send the message via UDP
-                print(f"Broadcasted message to {peer}: {message}")
+                print(f"Broadcasted message to {PEER_NAMES[peer]}: {message['type']}")
             except Exception as e:
                 print(f"Error broadcasting to {peer}: {e}")
+        print(f"Clock: {self.clock}")
 
     def send_message(self, message, receiver):
         # Send message to specific peer
@@ -313,7 +317,6 @@ class Peer:
         message["lamport_pair"] = (self.clock, self.my_address[1])
         # serialize message
         serialized_message = json.dumps(message).encode('utf-8') 
-        print(f"Clock: {self.clock}")
         try:
             # add a delay of 3 seconds
             time.sleep(3)
@@ -321,6 +324,7 @@ class Peer:
             print(f"Sent message to {receiver}: {message}")
         except Exception as e:
             print(f"Error broadcasting to {receiver}: {e}")
+        print(f"Clock: {self.clock}")
 
     def send_block(self, message, receiver):
         # Broadcast block to all other peers
