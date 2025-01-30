@@ -339,34 +339,38 @@ class Peer:
             continue
 
         # Critical section: Add block to blockchain
-        print("Mutex granted. Entering critical section to add block.")
-        amount = int(message)
-        #  verify client has enough balance to issue this transfer
-        if not self.can_afford_transfer(self.my_address[1], amount):
-            print("FAILED! Insufficient Balance.")
-            # release mutex
-            self.release_mutex()
-            print("Exiting critical section and releasing mutex.")
-        else: # sufficient balance
-            # add block to head of blockchain
-            self.add_block(self.my_address, DEFAULT_PEERS[receiver - 1], amount)
-            # broadcast message to all other peers
-            # serialize block and attach lamport pair (clock, port)
-            block = self.blockchain[0]
-            block_dict = block.to_dict()
-            message_data = {
-                "type": "BLOCK",
-                "block": block_dict,
-                "lamport_pair": (self.clock, self.my_address[1])
-            }
-            self.broadcast_message(message_data)
+        try:
+            print("Mutex granted. Entering critical section to add block.")
+            amount = int(message)
+            #  verify client has enough balance to issue this transfer
+            if not self.can_afford_transfer(self.my_address[1], amount):
+                print("FAILED! Insufficient Balance.")
+                # release mutex
+                self.release_mutex()
+                print("Exiting critical section and releasing mutex.")
+            else: # sufficient balance
+                # add block to head of blockchain
+                self.add_block(self.my_address, DEFAULT_PEERS[receiver - 1], amount)
+                # broadcast message to all other peers
+                # serialize block and attach lamport pair (clock, port)
+                block = self.blockchain[0]
+                block_dict = block.to_dict()
+                message_data = {
+                    "type": "BLOCK",
+                    "block": block_dict,
+                    "lamport_pair": (self.clock, self.my_address[1])
+                }
+                self.broadcast_message(message_data)
 
-            # update balance table
-            receiver_port = DEFAULT_PEERS[receiver - 1][1]
-            print(f"Balance before transfer: {self.get_balance(self.my_address[1])}")
-            self.update_balance_table(self.my_address[1], receiver_port, amount)
-            print(f"Balance after transfer: {self.get_balance(self.my_address[1])}")
-
+                # update balance table
+                receiver_port = DEFAULT_PEERS[receiver - 1][1]
+                print(f"Balance before transfer: {self.get_balance(self.my_address[1])}")
+                self.update_balance_table(self.my_address[1], receiver_port, amount)
+                print(f"Balance after transfer: {self.get_balance(self.my_address[1])}")
+        except Exception as e:
+            # Log the error and ensure mutex is released
+            print(f"Error in critical section: {e}")
+        finally:
             # release the mutex
             self.release_mutex()
             print("Exiting critical section and releasing mutex.")
