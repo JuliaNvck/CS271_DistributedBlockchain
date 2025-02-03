@@ -207,7 +207,7 @@ class Peer:
     def release_mutex(self):
         # Release mutex
         if self.mutex:
-            print("Releasing mutex.")
+            print("Exiting critical section and releasing mutex.")
             self.mutex = False
             # remove own request from request queue
             heapq.heappop(self.queue)
@@ -350,7 +350,6 @@ class Peer:
                 print("FAILED! Insufficient Balance.")
                 # release mutex
                 self.release_mutex()
-                print("Exiting critical section and releasing mutex.")
             else: # sufficient balance
                 # add block to head of blockchain
                 self.add_block(self.my_address, DEFAULT_PEERS[receiver - 1], amount)
@@ -376,7 +375,6 @@ class Peer:
         finally:
             # release the mutex
             self.release_mutex()
-            print("Exiting critical section and releasing mutex.")
 
     def get_user_input(self):
         while self.running:
